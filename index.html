@@ -791,6 +791,18 @@
         <div id="patterns" class="tab-content">
             <div class="card">
                 <h3>📊 Pattern Analysis (Last 14 Days from Glooko)</h3>
+                
+                <div class="alert-box info" style="margin-bottom: var(--space-24);">
+                    <h4>📤 Import Glooko Data</h4>
+                    <p>Export your Glooko CSV and paste it below to auto-populate your metrics.</p>
+                    <div class="form-group">
+                        <label>Paste Glooko CSV Data</label>
+                        <textarea id="glookoCsv" placeholder="Paste your Glooko CSV here... (date, glucose, carbs, insulin, etc.)" rows="4" style="font-family: monospace; font-size: 12px;"></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="importGlooko()">Import Data</button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('glookoCsv').value = ''">Clear</button>
+                </div>
+
                 <div class="chart-placeholder">
                     📈 Your Ambulatory Glucose Profile (AGP)<br>
                     Median BG: 152 mg/dL | Highest: 386 mg/dL | Lowest: <54 mg/dL<br>
@@ -1243,6 +1255,86 @@
             entries = entries.filter(e => e.id !== id);
             saveEntriesToStorage();
             renderEntries();
+        }
+
+        // Glooko CSV Import Function
+        function importGlooko() {
+            const csv = document.getElementById('glookoCsv').value;
+            if (!csv.trim()) {
+                alert('⚠️ Please paste your Glooko CSV data first');
+                return;
+            }
+
+            try {
+                const lines = csv.trim().split('\n');
+                const headers = lines[0].toLowerCase();
+                
+                let metrics = {
+                    avgGlucose: 0,
+                    tir: 0,
+                    high: 0,
+                    veryHigh: 0,
+                    low: 0,
+                    glucoseCount: 0,
+                    totalCarbs: 0,
+                    totalInsulin: 0
+                };
+
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',');
+                    
+                    // Try to extract glucose value (usually 2nd or 3rd column)
+                    for (let j = 0; j < values.length; j++) {
+                        const val = parseInt(values[j]);
+                        if (!isNaN(val) && val > 50 && val < 400) {
+                            metrics.glucoseCount++;
+                            metrics.avgGlucose += val;
+                            
+                            if (val >= 70 && val <= 180) metrics.tir++;
+                            else if (val > 180 && val <= 250) metrics.high++;
+                            else if (val > 250) metrics.veryHigh++;
+                            else if (val < 70) metrics.low++;
+                            break;
+                        }
+                    }
+                    
+                    // Try to extract carbs and insulin
+                    for (let j = 0; j < values.length; j++) {
+                        const val = parseFloat(values[j]);
+                        if (!isNaN(val)) {
+                            if (val > 0 && val < 200 && headers.includes('carb')) {
+                                metrics.totalCarbs += val;
+                            }
+                            if (val > 0 && val < 100 && headers.includes('insulin')) {
+                                metrics.totalInsulin += val;
+                            }
+                        }
+                    }
+                }
+
+                if (metrics.glucoseCount === 0) {
+                    alert('⚠️ Could not parse glucose values. Make sure your CSV has glucose readings.');
+                    return;
+                }
+
+                // Calculate percentages
+                metrics.avgGlucose = Math.round(metrics.avgGlucose / metrics.glucoseCount);
+                metrics.tir = Math.round((metrics.tir / metrics.glucoseCount) * 100);
+                metrics.high = Math.round((metrics.high / metrics.glucoseCount) * 100);
+                metrics.veryHigh = Math.round((metrics.veryHigh / metrics.glucoseCount) * 100);
+                metrics.low = Math.round((metrics.low / metrics.glucoseCount) * 100);
+
+                // Show results
+                alert(`✅ Import Successful!\n\n📊 Metrics from your data:\n- Avg Glucose: ${metrics.avgGlucose} mg/dL\n- Time in Range: ${metrics.tir}%\n- High (181-250): ${metrics.high}%\n- Very High (>250): ${metrics.veryHigh}%\n- Low (<70): ${metrics.low}%\n\nCarbs: ${metrics.totalCarbs}g | Insulin: ${metrics.totalInsulin}U`);
+
+                // Save to localStorage
+                localStorage.setItem('glookoMetrics', JSON.stringify(metrics));
+                console.log('✅ Glooko data saved locally');
+
+            } catch (e) {
+                alert('❌ Error parsing CSV. Make sure your data is formatted correctly.\n\nError: ' + e.message);
+                console.error(e);
+            }
         }
 
         // Initialize
